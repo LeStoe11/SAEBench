@@ -46,4 +46,6 @@ sae_bench/evals/ravel/models/
 openai_api_key.txt
 dist/
 
-*.png
+*.png# pixi environments
+.pixi/*
+!.pixi/config.toml

@@ -40,7 +40,7 @@ class JumpReluSAE(base_sae.BaseSAE):
 
 
 def load_dictionary_learning_jump_relu_sae(
-    repo_id: str,
+    repo_id: str | None,
     filename: str,
     model_name: str,
     device: torch.device,
@@ -50,22 +50,28 @@ def load_dictionary_learning_jump_relu_sae(
 ) -> JumpReluSAE:
     assert "ae.pt" in filename
 
-    path_to_params = hf_hub_download(
-        repo_id=repo_id,
-        filename=filename,
-        force_download=False,
-        local_dir=local_dir,
-    )
+    if repo_id is not None:
+        path_to_params = hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            force_download=False,
+            local_dir=local_dir,
+        )
+    else:
+        path_to_params = filename
 
     pt_params = torch.load(path_to_params, map_location=torch.device("cpu"))
 
     config_filename = filename.replace("ae.pt", "config.json")
-    path_to_config = hf_hub_download(
-        repo_id=repo_id,
-        filename=config_filename,
-        force_download=False,
-        local_dir=local_dir,
-    )
+    if repo_id is not None:
+        path_to_config = hf_hub_download(
+            repo_id=repo_id,
+            filename=config_filename,
+            force_download=False,
+            local_dir=local_dir,
+        )
+    else:
+        path_to_config = config_filename
 
     with open(path_to_config) as f:
         config = json.load(f)
@@ -96,6 +102,8 @@ def load_dictionary_learning_jump_relu_sae(
     assert d_sae >= d_in
 
     if config["trainer"]["trainer_class"] == "JumpReluTrainer":
+        sae.cfg.architecture = "jumprelu"
+    if config["trainer"]["trainer_class"] == "IdempotentTrainer":
         sae.cfg.architecture = "jumprelu"
     else:
         raise ValueError(f"Unknown trainer class: {config['trainer']['trainer_class']}")
