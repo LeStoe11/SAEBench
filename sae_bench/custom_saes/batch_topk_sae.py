@@ -165,7 +165,7 @@ def load_dictionary_learning_batch_topk_sae(
 
 
 def load_dictionary_learning_matryoshka_batch_topk_sae(
-    repo_id: str,
+    repo_id: str | None,
     filename: str,
     model_name: str,
     device: torch.device,
@@ -175,22 +175,28 @@ def load_dictionary_learning_matryoshka_batch_topk_sae(
 ) -> BatchTopKSAE:
     assert "ae.pt" in filename
 
-    path_to_params = hf_hub_download(
-        repo_id=repo_id,
-        filename=filename,
-        force_download=False,
-        local_dir=local_dir,
-    )
+    if repo_id is not None:
+        path_to_params = hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            force_download=False,
+            local_dir=local_dir,
+        )
+    else:
+        path_to_params = filename
 
     pt_params = torch.load(path_to_params, map_location=torch.device("cpu"))
 
     config_filename = filename.replace("ae.pt", "config.json")
-    path_to_config = hf_hub_download(
-        repo_id=repo_id,
-        filename=config_filename,
-        force_download=False,
-        local_dir=local_dir,
-    )
+    if repo_id is not None: 
+        path_to_config = hf_hub_download(
+            repo_id=repo_id,
+            filename=config_filename,
+            force_download=False,
+            local_dir=local_dir,
+        )
+    else:
+        path_to_config = config_filename
 
     with open(path_to_config) as f:
         config = json.load(f)
@@ -231,6 +237,8 @@ def load_dictionary_learning_matryoshka_batch_topk_sae(
 
     if config["trainer"]["trainer_class"] == "MatryoshkaBatchTopKTrainer":
         sae.cfg.architecture = "matryoshka_batch_topk"
+    elif config["trainer"]["trainer_class"] == "IdempotentMatryoshkaBatchTopKTrainer":
+        sae.cfg.architecture = "idempotent_matryoshka_batch_topk"
     else:
         raise ValueError(f"Unknown trainer class: {config['trainer']['trainer_class']}")
 
