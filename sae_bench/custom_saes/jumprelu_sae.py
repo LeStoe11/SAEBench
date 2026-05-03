@@ -103,8 +103,8 @@ def load_dictionary_learning_jump_relu_sae(
 
     if config["trainer"]["trainer_class"] == "JumpReluTrainer":
         sae.cfg.architecture = "jumprelu"
-    if config["trainer"]["trainer_class"] == "IdempotentTrainer":
-        sae.cfg.architecture = "jumprelu"
+    elif config["trainer"]["trainer_class"] == "IdempotentTrainer":
+        sae.cfg.architecture = "idempotent_jumprelu"
     else:
         raise ValueError(f"Unknown trainer class: {config['trainer']['trainer_class']}")
 
