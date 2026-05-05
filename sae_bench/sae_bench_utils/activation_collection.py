@@ -20,7 +20,7 @@ LLM_NAME_TO_BATCH_SIZE = {
     "pythia-160m-deduped": 256,
     "gemma-2-2b": 32,
     "gemma-2-9b": 32,
-    "gemma-2-2b-it": 32,
+    "gemma-2-2b-it": 2,
     "gemma-2-9b-it": 32,
 }
 

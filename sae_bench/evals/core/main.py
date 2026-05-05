@@ -3,6 +3,7 @@
 # fmt: on
 import argparse
 import gc
+import json
 import logging
 import math
 import os
@@ -1339,69 +1340,103 @@ def arg_parser():
     return parser
 
 
-if __name__ == "__main__":
-    """
-    python evals/core/main.py "sae_bench_pythia70m_sweep_standard_ctx128_0712" "blocks.4.hook_resid_post__trainer_10" \
-    --batch_size_prompts 16 \
-    --n_eval_sparsity_variance_batches 2000 \
-    --n_eval_reconstruction_batches 200 \
-    --output_folder "eval_results/core" \
-    --exclude_special_tokens_from_reconstruction --verbose
+# if __name__ == "__main__":
+#     """
+#     python evals/core/main.py "sae_bench_pythia70m_sweep_standard_ctx128_0712" "blocks.4.hook_resid_post__trainer_10" \
+#     --batch_size_prompts 16 \
+#     --n_eval_sparsity_variance_batches 2000 \
+#     --n_eval_reconstruction_batches 200 \
+#     --output_folder "eval_results/core" \
+#     --exclude_special_tokens_from_reconstruction --verbose
 
-    python evals/core/main.py "sae_bench_gemma-2-2b_topk_width-2pow14_date-1109" "blocks.19.hook_resid_post__trainer_2" \
-    --batch_size_prompts 16 \
-    --n_eval_sparsity_variance_batches 2000 \
-    --n_eval_reconstruction_batches 200 \
-    --output_folder "eval_results/core" \
-    --exclude_special_tokens_from_reconstruction --verbose --llm_dtype bfloat16
-    """
-    args = arg_parser().parse_args()
-    eval_results = run_evaluations(args)
+#     python evals/core/main.py "sae_bench_gemma-2-2b_topk_width-2pow14_date-1109" "blocks.19.hook_resid_post__trainer_2" \
+#     --batch_size_prompts 16 \
+#     --n_eval_sparsity_variance_batches 2000 \
+#     --n_eval_reconstruction_batches 200 \
+#     --output_folder "eval_results/core" \
+#     --exclude_special_tokens_from_reconstruction --verbose --llm_dtype bfloat16
+#     """
+#     args = arg_parser().parse_args()
+#     eval_results = run_evaluations(args)
 
-    print("Evaluation complete. All results have been saved incrementally.")  # type: ignore
-    # print(f"Combined JSON: {output_files['combined_json']}")
-    # print(f"CSV: {output_files['csv']}")
+#     print("Evaluation complete. All results have been saved incrementally.")  # type: ignore
+#     # print(f"Combined JSON: {output_files['combined_json']}")
+#     # print(f"CSV: {output_files['csv']}")
 
 
 # Use this code snippet to use custom SAE objects
-# if __name__ == "__main__":
-#     import sae_bench.custom_saes.identity_sae as identity_sae
-#     import sae_bench.custom_saes.jumprelu_sae as jumprelu_sae
+if __name__ == "__main__":
+    import sae_bench.custom_saes.jumprelu_sae as jumprelu_sae
+    import sae_bench.custom_saes.batch_topk_sae as batch_topk_sae
 
-#     start_time = time.time()
+    start_time = time.time()
 
-#     random_seed = 42
-#     output_folder = "eval_results/core"
+    random_seed = 42
+    output_folder = "eval_results/core"
 
-#     batch_size_prompts = 16
-#     n_eval_reconstruction_batches = 20
-#     n_eval_sparsity_variance_batches = 20
-#     context_size = 128
-#     dataset_name = "Skylion007/openwebtext"
-#     exclude_special_tokens_from_reconstruction = True
+    batch_size_prompts = 16
+    n_eval_reconstruction_batches = 20
+    n_eval_sparsity_variance_batches = 20
+    context_size = 128
+    dataset_name = "Skylion007/openwebtext"
+    exclude_special_tokens_from_reconstruction = True
 
-#     model_name = "gemma-2-2b"
-#     hook_layer = 20
-#     llm_dtype = torch.bfloat16
+    model_name = "gemma-2-2b"
+    hook_layer = 12
+    llm_dtype = torch.bfloat16
+    
+    base_path = "../data"
+    folders = [
+        "JumpRelu_65k_high_l0_google_gemma-2-2b_idempotent",
+        "JumpRelu_65k_low_l0_google_gemma-2-2b_idempotent",
+    ]
 
-#     repo_id = "google/gemma-scope-2b-pt-res"
-#     filename = f"layer_{hook_layer}/width_16k/average_l0_71/params.npz"
-#     sae = jumprelu_sae.load_jumprelu_sae(repo_id, filename, hook_layer)
-#     selected_saes = [(f"{repo_id}_{filename}_gemmascope_sae", sae)]
+    selected_saes = []
+    for folder in folders:
+        for i in range(3):
+            filename = f"{base_path}/{folder}/resid_post_layer_12/trainer_{i}/ae.pt"
+            if "JumpRelu" in folder:
+                sae = jumprelu_sae.load_dictionary_learning_jump_relu_sae(None, filename, model_name, "cuda", torch.bfloat16, layer=hook_layer)
+            elif "MatryoshkaBatchTopK" in folder:
+                sae = batch_topk_sae.load_dictionary_learning_matryoshka_batch_topk_sae(None, filename, model_name, "cuda", torch.bfloat16, layer=hook_layer)
+            else:
+                raise ValueError(f"Unknown folder: {folder}")
 
-#     # it's recommended to specify the dtype of the SAE
-#     for sae_name, sae in selected_saes:
-#         sae.cfg.dtype = "bfloat16"
+            config_path = f"{base_path}/{folder}/resid_post_layer_12/trainer_{i}/config.json"
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            
+            sae_architecture = "IdempotentJumpRelu" if "JumpRelu" in folder else "IdempotentMatryoshkaBatchTopK"
+            l0 = config["trainer"]["target_l0"] if sae_architecture == "IdempotentJumpRelu" else config["trainer"]["k"]
+            if "4k" in folder:
+                width = "4k"
+            elif "16k" in folder:
+                width = "16k"
+            elif "65k" in folder:
+                width = "65k"
+            else:
+                raise ValueError(f"Unknown width: {folder}")
+            
+            sae_id = f"{sae_architecture}_{width}_{l0}"
+            selected_saes.append((f"{sae_id}", sae))
 
-#     multiple_evals(
-#         filtered_saes=selected_saes,
-#         n_eval_reconstruction_batches=n_eval_reconstruction_batches,
-#         n_eval_sparsity_variance_batches=n_eval_sparsity_variance_batches,
-#         eval_batch_size_prompts=batch_size_prompts,
-#         exclude_special_tokens_from_reconstruction=exclude_special_tokens_from_reconstruction,
-#         dataset=dataset_name,
-#         context_size=context_size,
-#         output_folder=output_folder,
-#         verbose=True,
-#         dtype=llm_dtype,
-#     )
+    # it's recommended to specify the dtype of the SAE
+    for sae_name, sae in selected_saes:
+        sae.cfg.dtype = "bfloat16"
+
+    multiple_evals(
+        selected_saes=selected_saes,
+        n_eval_reconstruction_batches=n_eval_reconstruction_batches,
+        n_eval_sparsity_variance_batches=n_eval_sparsity_variance_batches,
+        eval_batch_size_prompts=batch_size_prompts,
+        compute_featurewise_density_statistics=True,
+        compute_featurewise_weight_based_metrics=True,
+        exclude_special_tokens_from_reconstruction=exclude_special_tokens_from_reconstruction,
+        dataset=dataset_name,
+        context_size=context_size,
+        output_folder=output_folder,
+        verbose=True,
+        dtype="bfloat16",
+    )
+
+    

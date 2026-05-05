@@ -1,5 +1,6 @@
 import argparse
 import gc
+import json
 import os
 import pickle
 import random
@@ -299,92 +300,121 @@ def arg_parser():
     return parser
 
 
-if __name__ == "__main__":
-    """
-    Example Gemma-2-2B SAE Bench usage:
-    python evals/unlearning/main.py \
-    --sae_regex_pattern "sae_bench_gemma-2-2b_topk_width-2pow14_date-1109" \
-    --sae_block_pattern "blocks.5.hook_resid_post__trainer_2" \
-    --model_name gemma-2-2b-it
-
-    Example Gemma-2-2B Gemma-Scope usage:
-    python evals/unlearning/main.py \
-    --sae_regex_pattern "gemma-scope-2b-pt-res" \
-    --sae_block_pattern "layer_3/width_16k/average_l0_142" \
-    --model_name gemma-2-2b-it
-    """
-    args = arg_parser().parse_args()
-
-    device = general_utils.setup_environment()
-
-    start_time = time.time()
-
-    config, selected_saes = create_config_and_selected_saes(args)
-
-    print(selected_saes)
-
-    # create output folder
-    os.makedirs(args.output_folder, exist_ok=True)
-
-    # run the evaluation on all selected SAEs
-    results_dict = run_eval(
-        config,
-        selected_saes,
-        device,
-        args.output_folder,
-        args.force_rerun,
-        args.clean_up_artifacts,
-        args.artifacts_path,
-    )
-
-    end_time = time.time()
-
-    print(f"Finished evaluation in {end_time - start_time} seconds")
-
-# Use this code snippet to use custom SAE objects
 # if __name__ == "__main__":
-#     import sae_bench.custom_saes.identity_sae as identity_sae
-#     import sae_bench.custom_saes.jumprelu_sae as jumprelu_sae
+#     """
+#     Example Gemma-2-2B SAE Bench usage:
+#     python evals/unlearning/main.py \
+#     --sae_regex_pattern "sae_bench_gemma-2-2b_topk_width-2pow14_date-1109" \
+#     --sae_block_pattern "blocks.5.hook_resid_post__trainer_2" \
+#     --model_name gemma-2-2b-it
 
+#     Example Gemma-2-2B Gemma-Scope usage:
+#     python evals/unlearning/main.py \
+#     --sae_regex_pattern "gemma-scope-2b-pt-res" \
+#     --sae_block_pattern "layer_3/width_16k/average_l0_142" \
+#     --model_name gemma-2-2b-it
 #     """
-#     python evals/unlearning/main.py
-#     """
+#     args = arg_parser().parse_args()
+
 #     device = general_utils.setup_environment()
 
 #     start_time = time.time()
 
-#     random_seed = 42
-#     output_folder = "eval_results/unlearning"
+#     config, selected_saes = create_config_and_selected_saes(args)
 
-#     model_name = "gemma-2-2b-it"
-#     hook_layer = 20
-
-#     repo_id = "google/gemma-scope-2b-pt-res"
-#     filename = f"layer_{hook_layer}/width_16k/average_l0_71/params.npz"
-#     sae = jumprelu_sae.load_jumprelu_sae(repo_id, filename, hook_layer)
-#     selected_saes = [(f"{repo_id}_{filename}_gemmascope_sae", sae)]
-
-#     config = UnlearningEvalConfig(
-#         random_seed=random_seed,
-#         model_name=model_name,
-#     )
-
-#     config.llm_batch_size = activation_collection.LLM_NAME_TO_BATCH_SIZE[config.model_name]
-#     config.llm_dtype = activation_collection.LLM_NAME_TO_DTYPE[config.model_name]
+#     print(selected_saes)
 
 #     # create output folder
-#     os.makedirs(output_folder, exist_ok=True)
+#     os.makedirs(args.output_folder, exist_ok=True)
 
 #     # run the evaluation on all selected SAEs
 #     results_dict = run_eval(
 #         config,
 #         selected_saes,
 #         device,
-#         output_folder,
-#         force_rerun=True,
-#         clean_up_activations=False,
+#         args.output_folder,
+#         args.force_rerun,
+#         args.clean_up_artifacts,
+#         args.artifacts_path,
 #     )
 
 #     end_time = time.time()
 
 #     print(f"Finished evaluation in {end_time - start_time} seconds")
+
+# Use this code snippet to use custom SAE objects
+if __name__ == "__main__":
+    import sae_bench.custom_saes.jumprelu_sae as jumprelu_sae
+    import sae_bench.custom_saes.batch_topk_sae as batch_topk_sae
+
+    """
+    python evals/unlearning/main.py
+    """
+    device = general_utils.setup_environment()
+
+    start_time = time.time()
+
+    random_seed = 42
+    output_folder = "eval_results/unlearning"
+
+    model_name = "gemma-2-2b-it"
+    hook_layer = 12
+
+    base_path = "../data"
+    folders = [
+        "MatryoshkaBatchTopK_16k_high_l0_google_gemma-2-2b_idempotent_matryoshka_batch_top_k",
+    ]
+
+    selected_saes = []
+    for folder in folders:
+        for i in range(3):
+            filename = f"{base_path}/{folder}/resid_post_layer_12/trainer_{i}/ae.pt"
+            if "JumpRelu" in folder:
+                sae = jumprelu_sae.load_dictionary_learning_jump_relu_sae(None, filename, "gemma-2-2b", "cuda", torch.bfloat16, layer=hook_layer)
+            elif "MatryoshkaBatchTopK" in folder:
+                sae = batch_topk_sae.load_dictionary_learning_matryoshka_batch_topk_sae(None, filename, "gemma-2-2b", "cuda", torch.bfloat16, layer=hook_layer)
+            else:
+                raise ValueError(f"Unknown folder: {folder}")
+
+            config_path = f"{base_path}/{folder}/resid_post_layer_12/trainer_{i}/config.json"
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            
+            sae_architecture = "IdempotentJumpRelu" if "JumpRelu" in folder else "IdempotentMatryoshkaBatchTopK"
+            l0 = config["trainer"]["target_l0"] if sae_architecture == "IdempotentJumpRelu" else config["trainer"]["k"]
+            if "4k" in folder:
+                width = "4k"
+            elif "16k" in folder:
+                width = "16k"
+            elif "65k" in folder:
+                width = "65k"
+            else:
+                raise ValueError(f"Unknown width: {folder}")
+            
+            sae_id = f"{sae_architecture}_{width}_{l0}"
+            selected_saes.append((f"{sae_id}", sae))
+
+    config = UnlearningEvalConfig(
+        random_seed=random_seed,
+        model_name=model_name,
+    )
+
+    config.llm_batch_size = activation_collection.LLM_NAME_TO_BATCH_SIZE[config.model_name]
+    config.llm_dtype = activation_collection.LLM_NAME_TO_DTYPE[config.model_name]
+
+    # create output folder
+    os.makedirs(output_folder, exist_ok=True)
+
+    # run the evaluation on all selected SAEs
+    results_dict = run_eval(
+        config,
+        selected_saes,
+        device,
+        output_folder,
+        force_rerun=True,
+        clean_up_artifacts=False,
+    )
+
+    end_time = time.time()
+
+    print(f"Finished evaluation in {end_time - start_time} seconds")
