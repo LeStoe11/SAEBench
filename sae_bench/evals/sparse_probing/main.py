@@ -562,12 +562,14 @@ if __name__ == "__main__":
 
     base_path = "../data"
     folders = [
-        "MatryoshkaBatchTopK_16k_high_l0_google_gemma-2-2b_idempotent_matryoshka_batch_top_k",
+        "MatryoshkaBatchTopK_65k_low_l0_google_gemma-2-2b_idempotent_matryoshka_batch_top_k",
+        "MatryoshkaBatchTopK_65k_high_l0_google_gemma-2-2b_idempotent_matryoshka_batch_top_k",
     ]
 
-    selected_saes = []
     for folder in folders:
         for i in range(3):
+            selected_saes = []
+
             filename = f"{base_path}/{folder}/resid_post_layer_12/trainer_{i}/ae.pt"
             if "JumpRelu" in folder:
                 sae = jumprelu_sae.load_dictionary_learning_jump_relu_sae(None, filename, model_name, "cuda", torch.bfloat16, layer=hook_layer)
@@ -594,27 +596,28 @@ if __name__ == "__main__":
             sae_id = f"{sae_architecture}_{width}_{l0}"
             selected_saes.append((f"{sae_id}", sae))
 
-    config = SparseProbingEvalConfig(
-        random_seed=random_seed,
-        model_name=model_name,
-    )
+            config = SparseProbingEvalConfig(
+                sae_batch_size=50,
+                random_seed=random_seed,
+                model_name=model_name,
+            )
 
-    config.llm_batch_size = activation_collection.LLM_NAME_TO_BATCH_SIZE[config.model_name]
-    config.llm_dtype = activation_collection.LLM_NAME_TO_DTYPE[config.model_name]
+            config.llm_batch_size = activation_collection.LLM_NAME_TO_BATCH_SIZE[config.model_name]
+            config.llm_dtype = activation_collection.LLM_NAME_TO_DTYPE[config.model_name]
 
-    # create output folder
-    os.makedirs(output_folder, exist_ok=True)
+            # create output folder
+            os.makedirs(output_folder, exist_ok=True)
 
-    # run the evaluation on all selected SAEs
-    results_dict = run_eval(
-        config,
-        selected_saes,
-        device,
-        output_folder,
-        force_rerun=True,
-        clean_up_activations=False,
-        save_activations=True,
-    )
+            # run the evaluation on all selected SAEs
+            results_dict = run_eval(
+                config,
+                selected_saes,
+                device,
+                output_folder,
+                force_rerun=True,
+                clean_up_activations=False,
+                save_activations=True,
+            )
 
     end_time = time.time()
 

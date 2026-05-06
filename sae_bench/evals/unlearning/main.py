@@ -362,7 +362,8 @@ if __name__ == "__main__":
 
     base_path = "../data"
     folders = [
-        "MatryoshkaBatchTopK_16k_high_l0_google_gemma-2-2b_idempotent_matryoshka_batch_top_k",
+        "MatryoshkaBatchTopK_65k_low_l0_google_gemma-2-2b_idempotent_matryoshka_batch_top_k",
+        "MatryoshkaBatchTopK_65k_high_l0_google_gemma-2-2b_idempotent_matryoshka_batch_top_k",
     ]
 
     selected_saes = []
